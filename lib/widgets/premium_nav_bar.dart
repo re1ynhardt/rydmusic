@@ -33,36 +33,47 @@ class PremiumNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, AppLayout.navBarBottomMargin),
-      child: RepaintBoundary(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-            child: Container(
-              height: AppLayout.navBarHeight,
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceElevated.withOpacity(0.58),
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: Colors.white.withOpacity(0.09)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
-                    blurRadius: 28,
-                    offset: const Offset(0, 12),
+      // Раньше панель растягивалась на всю доступную ширину (минус
+      // боковые отступы Padding'а выше) — Center + FractionallySizedBox
+      // сужают её примерно в 1.5 раза (widthFactor ≈ 1/1.5) и оставляют
+      // по центру экрана, как компактную "капсулу", а не во всю ширину.
+      child: Center(
+        child: FractionallySizedBox(
+          widthFactor: 0.66,
+          child: RepaintBoundary(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(26),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                child: Container(
+                  height: AppLayout.navBarHeight,
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated.withOpacity(0.58),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: Colors.white.withOpacity(0.09)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.35),
+                        blurRadius: 28,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Row(
-                children: List.generate(
-                  items.length,
-                  (i) => _NavBarItem(
-                    item: items[i],
-                    selected: i == selectedIndex,
-                    onTap: () {
-                      if (i != selectedIndex) HapticFeedback.selectionClick();
-                      onSelect(i);
-                    },
+                  child: Row(
+                    children: List.generate(
+                      items.length,
+                      (i) => _NavBarItem(
+                        item: items[i],
+                        selected: i == selectedIndex,
+                        onTap: () {
+                          if (i != selectedIndex) {
+                            HapticFeedback.selectionClick();
+                          }
+                          onSelect(i);
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ),

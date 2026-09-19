@@ -86,6 +86,10 @@ class AudioPlayerService {
   /// стоп и прятала мини-плеер.
   bool _loadingSource = false;
 
+  /// true на время [insertAtStart] — см. подробный комментарий в
+  /// [_bindPlayer] у подписки на sequenceStateStream.
+  bool _reindexInProgress = false;
+
   ProcessingState _lastProcessingState = ProcessingState.idle;
 
   /// Сигнал: плеер был остановлен не из кода приложения (кнопка "Стоп" в
@@ -119,6 +123,19 @@ class AudioPlayerService {
     _indexSub = player.currentIndexStream.listen(_currentIndexController.add);
     _loopSub = player.loopModeStream.listen(_loopModeController.add);
     _sequenceSub = player.sequenceStateStream.listen((state) {
+      // ВАЖНО (баг "мини-плеер на кадр мигает случайным треком из
+      // библиотеки при переключении, обычно самым первым в списке"):
+      // пока идёт [insertAtStart] (см. ниже), just_audio может отдать
+      // здесь промежуточное состояние, где currentIndex ещё не сдвинут
+      // под только что вставленные в начало треки, а effectiveSequence
+      // уже обновлён — и tag по такому "старому" индексу 0 указывает на
+      // ПЕРВЫЙ из вставленных треков, а не на реально играющий. Именно
+      // поэтому мигал всегда самый верхний трек списка: он почти всегда
+      // и есть tracks[0] в rawQueue, то есть первый элемент "before" в
+      // _resolveRestInBackground. Пока идёт вставка — не доверяем этому
+      // потоку вовсе; правильный id публикуется явно ниже, уже после
+      // того как индекс гарантированно пересчитан.
+      if (_reindexInProgress) return;
       final tag = state?.currentSource?.tag;
       if (tag is MediaItem) _currentTrackIdController.add(tag.id);
     }, onError: (Object e, StackTrace st) {});
@@ -233,7 +250,20 @@ class AudioPlayerService {
     final src = _concatSource;
     if (src == null || tracks.isEmpty) return;
     _queue = [...tracks, ..._queue];
-    await src.insertAll(0, tracks.map(_buildSource).toList());
+    _reindexInProgress = true;
+    try {
+      await src.insertAll(0, tracks.map(_buildSource).toList());
+    } finally {
+      _reindexInProgress = false;
+    }
+    // Публикуем актуальный id УЖЕ ПОСЛЕ того, как just_audio точно
+    // пересчитал currentIndex под сдвинутый список. Пока шла вставка,
+    // подписка в _bindPlayer молчала (см. _reindexInProgress) — без
+    // этой явной публикации подписчики (PlayerProvider) остались бы без
+    // события вовсе, если реально играющий трек не поменялся (тот же
+    // тег, что и был, просто под другим индексом).
+    final tag = _player.sequenceState?.currentSource?.tag;
+    if (tag is MediaItem) _currentTrackIdController.add(tag.id);
   }
 
   /// Строит источник аудио для одного трека.

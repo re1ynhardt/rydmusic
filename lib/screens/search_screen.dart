@@ -101,6 +101,17 @@ class _SearchScreenState extends State<SearchScreen> {
     _startSearch(q);
   }
 
+  /// Крестик в строке поиска: очищает поле и сбрасывает результаты/
+  /// пагинацию — то же самое, что происходит при ручном стирании текста
+  /// (см. [_onChanged]), просто по одному тапу. Показывается всегда,
+  /// независимо от длины запроса (даже на пустом поле) — это просто
+  /// быстрый способ сбросить фокус/поле, а не индикатор "есть что
+  /// стирать".
+  void _clearSearch() {
+    _controller.clear();
+    _onChanged('');
+  }
+
   void _onChanged(String query) {
     setState(() {
       // Поле очищено — сбрасываем результаты и снова показываем историю.
@@ -274,6 +285,14 @@ class _SearchScreenState extends State<SearchScreen> {
                   hintStyle: TextStyle(color: AppColors.textSecondary),
                   prefixIcon: Icon(Icons.search_rounded,
                       color: AppColors.textSecondary),
+                  // Показывается всегда (не только когда поле непустое) —
+                  // см. комментарий у _clearSearch.
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.close_rounded,
+                        size: 20, color: AppColors.textSecondary),
+                    splashRadius: 18,
+                    onPressed: _clearSearch,
+                  ),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 14),
                 ),
