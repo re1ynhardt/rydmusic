@@ -1,0 +1,86 @@
+name: rydmusic
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 2.0.1+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+
+  # Аудио
+  just_audio: ^0.9.40
+  just_audio_background: ^0.0.1-beta.13
+  audio_session: ^0.1.21
+
+  # Сеть / парсинг client_id SoundCloud
+  dio: ^5.5.0
+
+  # Скрытый (headless) WebView, в котором грузится настоящая страница
+  # youtube.com — нужен, чтобы подсмотреть po_token/visitor_data из её
+  # собственного плеерного запроса (настоящая сессия, прошедшая
+  # BotGuard), не реализуя BotGuard вручную. Токены дальше уходят в
+  # yt-dlp. См. YoutubeSessionResolver + android/.../ytdlp_bridge.py.
+  flutter_inappwebview: ^6.1.5
+
+  # Состояние
+  provider: ^6.1.2
+
+  # UI
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  palette_generator: ^0.3.3+3
+
+  # Кэш client_id SoundCloud
+  shared_preferences: ^2.3.2
+
+  # Хэширование пароля и подпись запросов к Yandex Object Storage (SigV4)
+  crypto: ^3.0.6
+
+  # Выбор аватарки из галереи
+  image_picker: ^1.1.2
+
+  # Кроп аватарки перед загрузкой (чистый Flutter, без нативной настройки)
+  crop_your_image: ^1.1.0
+
+  # Выбор APK разработчиком для публикации обновления
+  file_picker: ^8.1.7
+
+  # Путь к локальной директории приложения — для хранения обложек плейлистов
+  # файлами на диске (быстрее и легче для памяти, чем base64 в SharedPreferences)
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices.
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+
+# Настройки для генерации иконок (пишем с самого края строки, без отступов)
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  # Optional: adaptive icon for Android 8+ (nicer round/square masking)
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  
+  # Необязательно (для Android 8.0+ адаптивные иконки):
+  # adaptive_icon_background: "#FFFFFF" # Цвет фона для иконки
+  # adaptive_icon_foreground: "assets/images/icon_foreground.png" # Прозрачный логотип

@@ -1,0 +1,4 @@
+# VK Audio Parser — Python dependencies
+# Установка: pip install -r requirements.txt --break-system-packages
+requests>=2.31.0,<3.0
+pycryptodome>=3.18.0,<4.0
