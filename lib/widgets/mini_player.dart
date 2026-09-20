@@ -175,7 +175,22 @@ class _MiniPlayerState extends State<MiniPlayer>
     // не вызывает ни одной лишней перерисовки блюра.
     final player = context.read<PlayerProvider>();
     final track = context.select<PlayerProvider, Track?>((p) => p.currentTrack);
-    if (track == null) return const SizedBox.shrink();
+    if (track == null) {
+      // ВАЖНО (баг "смахнул трек, включил его же заново — играет, а
+      // мини-плеера не видно"): раньше здесь просто возвращался
+      // SizedBox.shrink(), а _lastTrackId ниже не трогался. При
+      // повторном запуске ТОГО ЖЕ трека track.id совпадал со старым
+      // _lastTrackId, блок сброса _dragX (см. ниже) считал, что трек не
+      // менялся, и не сбрасывал координату свайпа — карточка так и
+      // оставалась утащенной за край экрана с нулевой прозрачностью.
+      // Для любого ДРУГОГО трека бага не было: id отличался, и сброс
+      // срабатывал как обычно. Обнуляя _lastTrackId здесь, делаем так,
+      // чтобы следующее появление плеера — с любым треком, включая тот
+      // же самый — всегда проходило по ветке "трек сменился" и сбрасывало
+      // хвост свайпа.
+      _lastTrackId = null;
+      return const SizedBox.shrink();
+    }
     final isPlaying = context.select<PlayerProvider, bool>((p) => p.isPlaying);
     final loopMode = context.select<PlayerProvider, LoopMode>((p) => p.loopMode);
 

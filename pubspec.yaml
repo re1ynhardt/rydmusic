@@ -4,7 +4,7 @@ description: "A new Flutter project."
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 2.0.1+1
+version: 2.0.2+2
 
 environment:
   sdk: ^3.12.2
@@ -19,7 +19,13 @@ dependencies:
 
   # Аудио
   just_audio: ^0.9.40
-  just_audio_background: ^0.0.1-beta.13
+  # Раньше здесь был just_audio_background — простая автоматическая
+  # обёртка без возможности добавить свои кнопки в уведомление (сама же
+  # documentation рекомендует audio_service напрямую, если нужен
+  # контроль над кнопками). Версия ниже — та же самая, что уже была
+  # подтянута транзитивно через just_audio_background, так что
+  # pubspec.lock не должен поменяться после `flutter pub get`.
+  audio_service: ^0.18.19
   audio_session: ^0.1.21
 
   # Сеть / парсинг client_id SoundCloud

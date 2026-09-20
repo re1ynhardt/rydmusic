@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
 
 import 'main_shell.dart';
@@ -18,9 +18,11 @@ import 'providers/playlists_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/vk_auth_provider.dart';
 import 'screens/auth_screen.dart';
+import 'services/audio_player_service.dart';
 import 'services/audiomack_service.dart';
 import 'services/deezer_service.dart';
 import 'services/music_source.dart';
+import 'services/notification_audio_handler.dart';
 import 'services/soundcloud_service.dart';
 import 'services/vk_service.dart';
 import 'services/youtube_po_token_resolver.dart';
@@ -48,13 +50,33 @@ Future<void> main() async {
 
   // Требует в AndroidManifest.xml: сервис AudioService, ресивер
   // MediaButtonReceiver и разрешения WAKE_LOCK / FOREGROUND_SERVICE /
-  // FOREGROUND_SERVICE_MEDIA_PLAYBACK / POST_NOTIFICATIONS — всё это уже
-  // добавлено в манифест. Без них init() зависает на сплеш-экране.
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.soundwave.app.audio',
-    androidNotificationChannelName: 'Soundwave Playback',
-    androidNotificationOngoing: true,
-    androidStopForegroundOnPause: true,
+  // FOREGROUND_SERVICE_MEDIA_PLAYBACK / POST_NOTIFICATIONS — то же
+  // самое, что уже требовалось just_audio_background, в манифесте
+  // менять ничего не нужно.
+  //
+  // Раньше уведомление собирал just_audio_background — простая
+  // автоматическая обёртка без возможности добавить свои кнопки (см. её
+  // же документацию: "нужен больший контроль — используйте audio_service
+  // напрямую"). Теперь используем audio_service напрямую со своим
+  // PlayerAudioHandler (см. services/notification_audio_handler.dart) —
+  // он транслирует состояние ЭТОГО ЖЕ AudioPlayerService в уведомление и
+  // добавляет кастомные кнопки "избранное" и "повтор", которых в
+  // just_audio_background в принципе не было.
+  //
+  // AudioPlayerService и FavoritesProvider создаются здесь, ДО runApp,
+  // а не внутри MultiProvider ниже — чтобы PlayerAudioHandler и
+  // PlayerProvider работали с ОДНИМИ И ТЕМИ ЖЕ экземплярами (иначе
+  // уведомление и мини-плеер были бы двумя независимыми плеерами).
+  final audioPlayerService = AudioPlayerService();
+  final favoritesProvider = FavoritesProvider();
+  final audioHandler = await AudioService.init(
+    builder: () => PlayerAudioHandler(audioPlayerService, favoritesProvider),
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.soundwave.app.audio',
+      androidNotificationChannelName: 'Soundwave Playback',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+    ),
   );
 
   // Тема грузится синхронно из SharedPreferences до runApp, чтобы первый
@@ -112,6 +134,9 @@ Future<void> main() async {
       nowPlayingVisibility: nowPlayingVisibility,
       nowPlayingObserver: nowPlayingObserver,
       developerEmails: developerEmails,
+      audioPlayerService: audioPlayerService,
+      favoritesProvider: favoritesProvider,
+      audioHandler: audioHandler,
     ),
   );
 
@@ -141,6 +166,9 @@ class SoundwaveApp extends StatelessWidget {
     required this.nowPlayingVisibility,
     required this.nowPlayingObserver,
     required this.developerEmails,
+    required this.audioPlayerService,
+    required this.favoritesProvider,
+    required this.audioHandler,
   });
   final Map<MusicSourceType, MusicSource> sources;
   final ThemeProvider themeProvider;
@@ -149,6 +177,11 @@ class SoundwaveApp extends StatelessWidget {
   final NowPlayingVisibility nowPlayingVisibility;
   final NowPlayingRouteObserver nowPlayingObserver;
   final Set<String> developerEmails;
+  // Один и тот же экземпляр, что уже вручную привязан к
+  // PlayerAudioHandler в main() — см. комментарий там.
+  final AudioPlayerService audioPlayerService;
+  final FavoritesProvider favoritesProvider;
+  final AudioHandler audioHandler;
 
   @override
   Widget build(BuildContext context) {
@@ -162,10 +195,21 @@ class SoundwaveApp extends StatelessWidget {
           create: (_) => CachedTracksProvider(sources: sources),
         ),
         ChangeNotifierProvider(
-          create: (context) => PlayerProvider(
-            sources: sources,
-            cachedTracksProvider: context.read<CachedTracksProvider>(),
-          ),
+          create: (context) {
+            final player = PlayerProvider(
+              sources: sources,
+              cachedTracksProvider: context.read<CachedTracksProvider>(),
+              audioService: audioPlayerService,
+              notificationHandler: audioHandler,
+            );
+            // Свайп САМОГО системного уведомления идёт мимо
+            // PlayerProvider.stop() — подключаем колбэк, которым
+            // PlayerAudioHandler сообщает об этом обратно (см. его
+            // stop() и комментарий у PlayerProvider.handleNotificationStop).
+            (audioHandler as PlayerAudioHandler).onNotificationInitiatedStop =
+                player.handleNotificationStop;
+            return player;
+          },
         ),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => VkAuthProvider()),
@@ -175,8 +219,14 @@ class SoundwaveApp extends StatelessWidget {
         // входе/выходе/смене пользователя — раньше библиотека была общей
         // на устройство и жила в SharedPreferences, теперь она в Yandex
         // Object Storage и привязана к аккаунту.
+        //
+        // create возвращает уже готовый favoritesProvider (тот же самый
+        // экземпляр, на который подписан PlayerAudioHandler — см.
+        // main()), а не создаёт новый: иначе кнопка "избранное" в
+        // уведомлении и сердечко в приложении смотрели бы на разные
+        // списки избранного.
         ChangeNotifierProxyProvider<AuthProvider, FavoritesProvider>(
-          create: (_) => FavoritesProvider(),
+          create: (_) => favoritesProvider,
           update: (_, auth, favorites) {
             favorites!.setUser(auth.user?.email);
             return favorites;

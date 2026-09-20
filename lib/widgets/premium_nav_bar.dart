@@ -34,12 +34,12 @@ class PremiumNavBar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, AppLayout.navBarBottomMargin),
       // Раньше панель растягивалась на всю доступную ширину (минус
-      // боковые отступы Padding'а выше) — Center + FractionallySizedBox
-      // сужают её примерно в 1.5 раза (widthFactor ≈ 1/1.5) и оставляют
-      // по центру экрана, как компактную "капсулу", а не во всю ширину.
+      // боковые отступы Padding'а выше). Center + FractionallySizedBox
+      // делают её компактной "капсулой" по центру экрана, а не во всю
+      // ширину — но 0.66 оказался слишком узким, съезжает к 0.85.
       child: Center(
         child: FractionallySizedBox(
-          widthFactor: 0.66,
+          widthFactor: 0.85,
           child: RepaintBoundary(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(26),

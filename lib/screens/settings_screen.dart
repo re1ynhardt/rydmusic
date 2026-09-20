@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -151,13 +152,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (publish != true) return;
+    // withData: true заставляет file_picker целиком прогонять файл через
+    // platform channel (base64 туда-обратно между нативной и Dart
+    // стороной) ещё до того, как мы получим управление — на файле
+    // размером с APK (десятки/сотни МБ) это удваивает пиковое
+    // потребление памяти и приложение падает по OOM прямо в момент
+    // выбора файла, до входа в try/catch ниже. Берём только путь и
+    // читаем байты сами через dart:io — один буфер вместо двух.
     final file = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['apk'],
-      withData: true,
     );
-    final bytes = file?.files.single.bytes;
-    if (bytes == null) return;
+    final path = file?.files.single.path;
+    if (path == null) return;
     final buildNumber = int.tryParse(build.text);
     if (buildNumber == null) {
       _showError(l10n.buildNumberMustBeNumber);
@@ -165,6 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _updateBusy = true);
     try {
+      final bytes = await File(path).readAsBytes();
       final update = await _updateService.publishAndroidApk(
         apkBytes: bytes,
         version: version.text,

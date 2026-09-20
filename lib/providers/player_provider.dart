@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,8 +15,17 @@ class PlayerProvider extends ChangeNotifier {
   PlayerProvider({
     required Map<MusicSourceType, MusicSource> sources,
     CachedTracksProvider? cachedTracksProvider,
+    // Передаётся из main.dart — тот же самый экземпляр, на который уже
+    // подписан PlayerAudioHandler (см. notification_audio_handler.dart).
+    // Если не передать (например, в тестах), сервис создастся сам, как
+    // и раньше — просто в этом случае системное уведомление не будет
+    // видеть события этого плеера.
+    AudioPlayerService? audioService,
+    AudioHandler? notificationHandler,
   })  : _sources = sources,
-        _cachedTracksProvider = cachedTracksProvider {
+        _cachedTracksProvider = cachedTracksProvider,
+        _service = audioService ?? AudioPlayerService(),
+        _notificationHandler = notificationHandler {
     _service.playerStateStream.listen((state) {
       final playing = state.playing;
       final buffering = state.processingState == ProcessingState.buffering ||
@@ -205,7 +215,8 @@ class PlayerProvider extends ChangeNotifier {
 
   final Map<MusicSourceType, MusicSource> _sources;
   final CachedTracksProvider? _cachedTracksProvider;
-  final AudioPlayerService _service = AudioPlayerService();
+  final AudioPlayerService _service;
+  final AudioHandler? _notificationHandler;
 
   List<Track> _queue = [];
   int? _currentIndex;
@@ -646,12 +657,30 @@ class PlayerProvider extends ChangeNotifier {
     _resetPlaybackState();
   }
 
+  /// Вызывается из PlayerAudioHandler.onNotificationInitiatedStop (см.
+  /// main.dart, где колбэк подключается) — когда трек остановили СНАРУЖИ,
+  /// свайпом самого системного уведомления, а не мини-плеера в
+  /// приложении. Плеер к этому моменту уже остановлен самим хендлером —
+  /// здесь только синхронизируем локальное состояние приложения с этим
+  /// фактом, чтобы мини-плеер тоже спрятался.
+  void handleNotificationStop() => _resetPlaybackState();
+
   /// Сбрасывает локальное состояние "что сейчас играет" — общая часть
-  /// для явного [stop] (свайп мини-плеера) и для реакции на внешний
-  /// стоп из уведомления (см. подписку на `_service.externalStop` в
-  /// конструкторе). Сам плеер к этому моменту уже остановлен — либо
-  /// нами, либо системой.
+  /// для явного [stop] (свайп мини-плеера), для реакции на внешний стоп
+  /// из уведомления (см. подписку на `_service.externalStop` в
+  /// конструкторе) и для [handleNotificationStop] (свайп самого
+  /// уведомления). Сам плеер к этому моменту уже остановлен — либо нами,
+  /// либо системой.
   void _resetPlaybackState() {
+    if (_currentTrackId == null && _queue.isEmpty) {
+      // Уже сброшено. Без этой проверки [handleNotificationStop] и вызов
+      // notificationHandler.stop() ниже гоняли бы события друг на друга
+      // по кругу: PlayerAudioHandler.stop() → onNotificationInitiatedStop
+      // → сюда → notificationHandler.stop() снова → ... (на стороне
+      // самого хендлера от этого же эха защищает его собственный флаг
+      // _stopAlreadyHandled — это вторая, "своя" защита на всякий случай).
+      return;
+    }
     _resolveGeneration++; // обрывает недорезолвленный фон из playTrack()
     _stuckWatchdog?.cancel();
     _queue = [];
@@ -660,6 +689,15 @@ class PlayerProvider extends ChangeNotifier {
     _isPlaying = false;
     positionListenable.value = Duration.zero;
     notifyListeners();
+    // ВАЖНО: это единственное место, которое ТОЧНО знает, что трека
+    // больше нет (а не просто идёт временная переходная фаза между
+    // треками — все такие фазы уже отфильтрованы выше по стеку). Без
+    // этого вызова системное уведомление осталось бы висеть с последним
+    // треком после свайпа мини-плеера — currentSourceTrackId у самого
+    // AudioPlayerService после player.stop() не обнуляется (см. его
+    // комментарии), поэтому PlayerAudioHandler сам эту ситуацию не
+    // поймает и должен быть уведомлён явно.
+    unawaited(_notificationHandler?.stop());
   }
 
   @override
